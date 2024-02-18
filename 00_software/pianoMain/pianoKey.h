@@ -52,6 +52,7 @@ public:
  
 private:
   void polling(uint32_t octave, uint32_t addr);
+  void stateLower(uint32_t octave, uint32_t addr);
   void state(uint32_t octave, uint32_t addr);
 
   typedef struct

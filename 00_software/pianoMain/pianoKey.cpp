@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <esp32-hal.h>
+#include <esp32-hal.h> // C:\Users\nb1e4\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\cores\esp32
 #include "pianoKey.h"
 
 const uint32_t upperDIN[OCTAVENUM] = {36, 34, 32, 27, 12, 15, 16,  5};
@@ -16,7 +16,8 @@ uint32_t pianoKey::process(uint32_t octave, uint32_t addr) {
   key_st *pkey = &key[octave][addr];
 
   polling(octave, addr);
-  state(octave, addr);
+  stateLower(octave, addr);//Uppwer接点んが機能せずLower接点のみが機能
+  // state(octave, addr);//Upper接点、Lower接点の両方ともに機能
 
   return(pkey->volume);
 }
@@ -45,6 +46,14 @@ void pianoKey::polling(uint32_t octave, uint32_t addr) {
   */
   pkey->upper = digitalRead(upperDIN[octave]);
   pkey->lower = digitalRead(lowerDIN[octave]);
+}
+
+
+void pianoKey::stateLower(uint32_t octave, uint32_t addr) {
+  key_st *pkey = &key[octave][addr];
+
+  if(pkey->lower == true) pkey->volume = 1;
+  else pkey->volume = 0;
 }
 
 void pianoKey::state(uint32_t octave, uint32_t addr) {
