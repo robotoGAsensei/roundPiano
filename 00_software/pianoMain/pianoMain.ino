@@ -7,6 +7,7 @@
  */
 // Stop button is attached to PIN 0 (IO0)
 #include "pianoKey.h"
+#include "dac.h"
 
 #define BTN_STOP_ALARM    0
 hw_timer_t * timer = NULL;
@@ -16,8 +17,9 @@ volatile uint32_t isrCounter = 0;
 volatile uint32_t lastIsrAt = 0;
 
 pianoKey key;
+dac dac;
 
-const uint32_t DOUT[4] = {23,22,21,19}; //13,12 を使うとシリアル通信ができなくなるので注意
+const uint32_t DOUT[4] = {19,21,22,23}; //13,12 を使うとシリアル通信ができなくなるので注意
 
 void IRAM_ATTR onTimer(){
   // Increment the counter and set the time of ISR
@@ -49,19 +51,22 @@ void task50us(void *pvParameters){
 
       // マルチプレクサに出力するセレクト信号
       if(++address > MULTIPLEXNUM - 1) address = 0;
-      digitalWrite(DOUT[3], 0x1 & (address >> 3));
-      digitalWrite(DOUT[2], 0x1 & (address >> 2));
-      digitalWrite(DOUT[1], 0x1 & (address >> 1));
       digitalWrite(DOUT[0], 0x1 & address);
+      digitalWrite(DOUT[1], 0x1 & (address >> 1));
+      digitalWrite(DOUT[2], 0x1 & (address >> 2));
+      digitalWrite(DOUT[3], 0x1 & (address >> 3));
 
       if(isrCount % 20000 == 0) {
-        Serial.print(" onTimer no. ");
-        Serial.print(isrCount);
-        Serial.print(" at ");
+        dac.output();
         Serial.print(isrTime);
-        Serial.println(" ms");
+        Serial.print(" ms : ");
+        Serial.print(volume[0][0]);
+        Serial.print(volume[0][1]);
+        Serial.print(volume[0][2]);
+        Serial.println("");
       }
     }
+
 
     // If button is pressed
     if (digitalRead(BTN_STOP_ALARM) == LOW) {
@@ -83,6 +88,8 @@ void setup() {
   // タスクを作る前にpinModeの設定をする必要がある
   key.init();
   for(int j=0;j<4;j++) pinMode(DOUT[j], OUTPUT);
+
+  dac.init();
 
   // Create semaphore to inform us when the timer has fired
   timerSemaphore = xSemaphoreCreateBinary();

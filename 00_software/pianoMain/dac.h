@@ -4,6 +4,7 @@
 class dac {
 public:
   void init();
+  void output();
  
 private:
 
