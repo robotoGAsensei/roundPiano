@@ -9,7 +9,6 @@
 #include "pianoKey.h"
 #include "dac.h"
 
-#define BTN_STOP_ALARM    0
 hw_timer_t * timer = NULL;
 volatile SemaphoreHandle_t timerSemaphore;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -66,24 +65,11 @@ void task50us(void *pvParameters){
         Serial.println("");
       }
     }
-
-
-    // If button is pressed
-    if (digitalRead(BTN_STOP_ALARM) == LOW) {
-      // If timer is still running
-      if (timer) {
-        // Stop and free timer
-        timerEnd(timer);
-        timer = NULL;
-      }
-    }
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  // Set BTN_STOP_ALARM to input mode
-  pinMode(BTN_STOP_ALARM, INPUT);
   
   // タスクを作る前にpinModeの設定をする必要がある
   key.init();
