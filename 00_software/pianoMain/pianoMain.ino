@@ -14,6 +14,8 @@ volatile SemaphoreHandle_t timerSemaphore;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t isrCounter = 0;
 volatile uint32_t lastIsrAt = 0;
+static uint32_t address;
+static uint32_t volume[OCTAVENUM][MULTIPLEXNUM];
 
 pianoKey key;
 dac dac;
@@ -31,19 +33,15 @@ void IRAM_ATTR onTimer(){
   // It is safe to use digitalRead/Write here if you want to toggle an output
 }
 
+//処理に時間のかかる関数を同一タスク内で実行すると実行周期が遅くなり波形が乱れる
+//dac.output()は一度実行すると50ms程度は関数から抜ける事ができない
+//このため50us周期で実行する必要のあるタスクを独立したコアに割り当てる
+//delayの最小単位であるdelay(1)によりウォッチドッグによるリセットを回避できるが
+//実行周期として50usを達成するためにはdelay(1)による1msの空白期間が許容されない
+//このため disableCore0WDT()によりウォッチドッグを無効化する
 void task50us(void *pvParameters){
-  static uint32_t address;
-  static uint32_t volume[OCTAVENUM][MULTIPLEXNUM];
-
   while(1){
-    // If Timer has fired
     if (xSemaphoreTake(timerSemaphore, 0) == pdTRUE){
-      uint32_t isrCount = 0, isrTime = 0;
-      // Read the interrupt count and time
-      portENTER_CRITICAL(&timerMux);
-      isrCount = isrCounter;
-      isrTime = lastIsrAt;
-      portEXIT_CRITICAL(&timerMux);
 
       // キーボードの状態を更新しボリュームを取得する
       for(int i=0; i<OCTAVENUM; i++) volume[i][address] = key.process(i,address);
@@ -54,17 +52,28 @@ void task50us(void *pvParameters){
       digitalWrite(DOUT[1], 0x1 & (address >> 1));
       digitalWrite(DOUT[2], 0x1 & (address >> 2));
       digitalWrite(DOUT[3], 0x1 & (address >> 3));
-
-      if(isrCount % 20000 == 0) {
-        dac.output();
-        Serial.print(isrTime);
-        Serial.print(" ms : ");
-        Serial.print(volume[0][0]);
-        Serial.print(volume[0][1]);
-        Serial.print(volume[0][2]);
-        Serial.println("");
-      }
     }
+  }
+}
+
+//dac.output()をコールしたタイミングでバッファ受け取り可能であれば受け取り処理が走る
+//受け取り処理として例えば50msを要するが、時間はバッファサイズやサンプリングレートに依存する
+//受け取り可能でない場合にコールすると、1ms以内に関数から抜ける
+//dac.output()のコール周期が例えば1sになると、断続的な波形が再生される
+//連続波形を再生するためには連続的にコールし続ける必要がある
+void taskDac(void *pvParameters){
+  uint32_t isrCount, isrTime;
+
+  while(1){
+    portENTER_CRITICAL(&timerMux);
+    isrCount = isrCounter;
+    isrTime = lastIsrAt;
+    portEXIT_CRITICAL(&timerMux);
+
+    dac.output();
+    Serial.printf("Time : %d ms ---> ",isrTime);
+    Serial.printf("volume[0][0,1,2] : %d %d %d\n", volume[0][0], volume[0][1], volume[0][2]);
+    delay(1);
   }
 }
 
@@ -90,7 +99,16 @@ void setup() {
   // Start an alarm
   timerAlarmEnable(timer);
 
-  //タスクを作った瞬間に最高優先度の無限ループに入るので、これ以降の処理は実行されない点に注意
+  xTaskCreateUniversal(
+    taskDac,
+    "taskDac",
+    8192,
+    NULL,
+    configMAX_PRIORITIES-1, // 最高優先度
+    NULL,
+    APP_CPU_NUM //PRO_CPU:Core0,WDT有効 / APP_CPU:Core1,WDT無効
+  );
+
   xTaskCreateUniversal(
     task50us,
     "task50us",
@@ -98,10 +116,12 @@ void setup() {
     NULL,
     configMAX_PRIORITIES-1, // 最高優先度
     NULL,
-    APP_CPU_NUM //PRO_CPU:Core0,WDT有効 / APP_CPU:Core1,WDT無効
+    PRO_CPU_NUM //PRO_CPU:Core0,WDT有効 / APP_CPU:Core1,WDT無効
   );
+
+  disableCore0WDT(); //PRO_CPUのウォッチドッグ停止
 }
 
 void loop() {
-  Serial.print("You will never see this message as task50us occupy the Core1");
+  delay(1);
 }

@@ -3,15 +3,17 @@
 
 #include "dac.h"
 
-// ピアノ鍵盤の最も低い周波数は27.5Hz(ラ)、最も高い周波数は4186Hz(ド)
-// lang-shipさんの実験結果からspsの上限は640000である事が分かっている
-// またDMA転送可能なバッファサイズは最大で1024である事が分かっている
-// buf[i]:ダミー, buf[i+1]:25pin, buf[i+2]:ダミー, buf[i+3]:26pinの構成となる
-// バッファとして1024byte確保した場合のbuf[i+1]のサイズは256byteとなる
-// この256byteに1波形を収録すると最低周波数となり、これを27.5Hzにするためには、
-// サンプリングレートを7040(=27.5*256)にする必要がある。 
+//ピアノ鍵盤の最も低い周波数は27.5Hz(ラ)、最も高い周波数は4186Hz(ド)
+//spsの上限は640000(lang-shipさんより)、また下限は20000である事を実験的に確認した
+//DMA転送可能なバッファサイズは最大で1024である事が分かっている
+//buf[i]:ダミー, buf[i+1]:25pin, buf[i+2]:ダミー, buf[i+3]:26pinの構成となる
+//バッファとして1024byte確保した場合の1波形(buf[i+1])のサイズは256byteとなる
 
 #define PI (3.1415)
+//サンプリングレート 10000:93Hz(下限値)
+//サンプリングレート 20000:93Hz(下限値)
+//サンプリングレート 30000:125Hz
+//サンプリングレート 40000:165Hz
 #define SAMPLING_RATE (20000)       // サンプリングレート
 #define BUFFER_LEN    (1024)           // バッファサイズ
 uint8_t soundBuffer[BUFFER_LEN];     // DMA転送バッファ
@@ -44,14 +46,14 @@ void dac::init() {
     .fixed_mclk           = 0,
   };
 
-  int step = 16;
+  int step = 4;
   int val = 0;
   int val2 = 0;
   for (int i = 0; i < BUFFER_LEN; i += 4) {
     soundBuffer[i] = 0;
-    soundBuffer[i + 1] = 127 + 127 * cos(2 * PI / 256 * val);
+    soundBuffer[i + 1] = 127 + 127 * cos(2 * PI / 256 * val); // 約5kHz
     soundBuffer[i + 2] = 0;
-    soundBuffer[i + 3] = 127 + 127 * sin(2 * PI / 256 * val2);
+    soundBuffer[i + 3] = 127 + 127 * sin(2 * PI / 256 * val2); // 約80Hz
     val += (256 / step);
     val2 += 1;
     if (256 <= val) {
