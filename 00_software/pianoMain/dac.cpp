@@ -4,18 +4,25 @@
 #include "dac.h"
 
 // ピアノ鍵盤の最も低い周波数は27.5Hz(ラ)、最も高い周波数は4186Hz(ド)
-// 再生周波数freq = サンプリングレートsps / バッファサイズbufSizeの関係となる
-// lang-shipさんの実験結果からspsの上限は640,000である事が分かっている
-// 例えば、最高音4186HzをbufSize 64で再生する場合のspsは267,904(=4186*64)となる
-// 最低音27.5Hzを同一spsで再生するためのbufSizeは9742byte(=267904/27.5)となる
-// I2Sに引き渡すフレームは4byteで構成され、そのうちの1byteが再生データに該当する
-// このため実際の容量として約40KB(=9742*4)を確保する必要がある
-// 必要量40KBに対してRAM容量327KBは十分だが、波形データをオンタイムで算出する必要がある
+// lang-shipさんの実験結果からspsの上限は640000である事が分かっている
+// またDMA転送可能なバッファサイズは最大で1024である事が分かっている
+// buf[i]:ダミー, buf[i+1]:25pin, buf[i+2]:ダミー, buf[i+3]:26pinの構成となる
+// バッファとして1024byte確保した場合のbuf[i+1]のサイズは256byteとなる
+// この256byteに1波形を収録すると最低周波数となり、これを27.5Hzにするためには、
+// サンプリングレートを7040(=27.5*256)にする必要がある。 
 
 #define PI (3.1415)
-#define SAMPLING_RATE (267904)       // サンプリングレート
+#define SAMPLING_RATE (20000)       // サンプリングレート
 #define BUFFER_LEN    (1024)           // バッファサイズ
 uint8_t soundBuffer[BUFFER_LEN];     // DMA転送バッファ
+
+#ifdef IDF_VER
+#define I2SOFFSET 1
+#define MY_I2S_COMM_FORMAT I2S_COMM_FORMAT_STAND_MSB
+#else
+#define I2SOFFSET 3
+#define MY_I2S_COMM_FORMAT I2S_COMM_FORMAT_I2S_MSB
+#endif
 
 void dac::output() {
   size_t transBytes;
@@ -27,8 +34,8 @@ void dac::init() {
     .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN),
     .sample_rate          = SAMPLING_RATE,
     .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-    .channel_format       = I2S_CHANNEL_FMT_ALL_LEFT,
-    .communication_format = I2S_COMM_FORMAT_I2S_MSB,
+    .channel_format       = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = MY_I2S_COMM_FORMAT,
     .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count        = 2,
     .dma_buf_len          = BUFFER_LEN,
@@ -39,12 +46,14 @@ void dac::init() {
 
   int step = 16;
   int val = 0;
+  int val2 = 0;
   for (int i = 0; i < BUFFER_LEN; i += 4) {
     soundBuffer[i] = 0;
-    soundBuffer[i + 1] = 127 + 127 * sin(2 * PI / 256 * val);
+    soundBuffer[i + 1] = 127 + 127 * cos(2 * PI / 256 * val);
     soundBuffer[i + 2] = 0;
-    soundBuffer[i + 2] = 0;
+    soundBuffer[i + 3] = 127 + 127 * sin(2 * PI / 256 * val2);
     val += (256 / step);
+    val2 += 1;
     if (256 <= val) {
       val = 0;
     }
