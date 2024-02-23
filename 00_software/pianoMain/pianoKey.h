@@ -1,7 +1,9 @@
 #ifndef PIANOKEY_H
 #define PIANOKEY_H
 
-#define OCTAVENUM (8)
+#define OCTAVENUM (7)
+#define TONENUM (12)
+#define EXTRATONENUM (4)
 #define MULTIPLEXNUM (16)
 
 typedef enum
@@ -48,25 +50,25 @@ typedef enum
 class pianoKey {
 public:
   void init();
-  uint32_t process(uint32_t octave, uint32_t addr);
- 
-private:
-  void polling(uint32_t octave, uint32_t addr);
-  void stateLower(uint32_t octave, uint32_t addr);
-  void state(uint32_t octave, uint32_t addr);
+  void process(uint32_t octave, uint32_t addr);
 
   typedef struct
   {
     seqID_t seqID;
     uint32_t start;
     uint32_t end;
-    uint32_t volume;
     uint32_t upper;
     uint32_t lower;
+    float volume;
+    float freq;
   } key_st;
 
   key_st key[OCTAVENUM][MULTIPLEXNUM];
+ 
+private:
+  void polling(uint32_t octave, uint32_t addr);
+  void stateLower(uint32_t octave, uint32_t addr);
+  void state(uint32_t octave, uint32_t addr);
 };
-
 
 #endif /* PIANOKEY_H */

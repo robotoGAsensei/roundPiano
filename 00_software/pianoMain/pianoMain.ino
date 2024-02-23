@@ -15,7 +15,6 @@ portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t isrCounter = 0;
 volatile uint32_t lastIsrAt = 0;
 static uint32_t address;
-static uint32_t volume[OCTAVENUM][MULTIPLEXNUM];
 
 pianoKey key;
 dac dac;
@@ -44,7 +43,7 @@ void task50us(void *pvParameters){
     if (xSemaphoreTake(timerSemaphore, 0) == pdTRUE){
 
       // キーボードの状態を更新しボリュームを取得する
-      for(int i=0; i<OCTAVENUM; i++) volume[i][address] = key.process(i,address);
+      for(int i=0; i<OCTAVENUM; i++) key.process(i,address);
 
       // マルチプレクサに出力するセレクト信号
       if(++address > MULTIPLEXNUM - 1) address = 0;
@@ -70,9 +69,9 @@ void taskDac(void *pvParameters){
     isrTime = lastIsrAt;
     portEXIT_CRITICAL(&timerMux);
 
-    dac.output();
-    Serial.printf("Time : %d ms ---> ",isrTime);
-    Serial.printf("volume[0][0,1,2] : %d %d %d\n", volume[0][0], volume[0][1], volume[0][2]);
+    dac.output(&key);
+    // Serial.printf("Time : %d ms ---> ",isrTime);
+    // Serial.printf("volume[0][0,1,2] : %f %f %f\n", key.key[0][0].volume, key.key[0][1].volume, key.key[0][2].volume);
     delay(1);
   }
 }
