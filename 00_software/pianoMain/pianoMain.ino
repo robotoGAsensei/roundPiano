@@ -8,6 +8,7 @@
 // Stop button is attached to PIN 0 (IO0)
 #include "dac.h"
 #include "pianoKey.h"
+#include "multiplex.h"
 
 hw_timer_t                *timer = NULL;
 volatile SemaphoreHandle_t timerSemaphore;
@@ -16,10 +17,9 @@ volatile uint32_t          isrCounter = 0;
 volatile uint32_t          lastIsrAt  = 0;
 static uint32_t            address;
 
-pianoKey key;
-dac      dac;
-
-const uint32_t DOUT[4] = {19, 21, 22, 23};  // 13,12 を使うとシリアル通信ができなくなるので注意
+dac       dac;
+pianoKey  key;
+multiplex multiplex;
 
 void IRAM_ATTR onTimer() {
   // Increment the counter and set the time of ISR
@@ -46,10 +46,7 @@ void task50us(void *pvParameters) {
 
       // マルチプレクサに出力するセレクト信号
       if (++address > MULTIPLEXNUM - 1) address = 0;
-      digitalWrite(DOUT[0], 0x1 & address);
-      digitalWrite(DOUT[1], 0x1 & (address >> 1));
-      digitalWrite(DOUT[2], 0x1 & (address >> 2));
-      digitalWrite(DOUT[3], 0x1 & (address >> 3));
+      multiplex.output(address);
     }
   }
 }
@@ -76,10 +73,9 @@ void setup() {
   Serial.begin(115200);
 
   // タスクを作る前にpinModeの設定をする必要がある
-  key.init();
-  for (int j = 0; j < 4; j++) pinMode(DOUT[j], OUTPUT);
-
   dac.init(&key);
+  key.init();
+  multiplex.init();
 
   // Create semaphore to inform us when the timer has fired
   timerSemaphore = xSemaphoreCreateBinary();
