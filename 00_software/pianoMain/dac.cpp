@@ -38,17 +38,20 @@ void dac::output(pianoKey *pkey) {
   static uint32_t a;
   static uint32_t flag;
 
+  // clear variables before calculation
+  waveNum = 0;
   for (uint32_t m = 0; m < RESOLUTION; m++) soundBufferCal[m]=0;
 
-  pkey->key[1][0].volume = 1.0;
+  // synthesize waves accroding to the pushed keyboard
   for(uint32_t oct = 0; oct < OCTAVENUM; oct++){
     for(uint32_t tone = 0; tone < TONENUM; tone++){
       if(pkey->key[oct][tone].volume > 0){
+        // To keep the same loudness, devide the synthesized wave by the number of synthesized wave
         waveNum++;
         for (uint32_t i = 0; i < RESOLUTION; i++) {
-          freqRatio = pkey->key[oct][tone].freq / NORMFREQ; //78.125Hzの時に1
-          phase = 2.0 * PI * (float)i /(float)RESOLUTION; //0～2πの範囲
-          sig = sin(freqRatio * phase);//三角関数を基底関数にする
+          freqRatio = pkey->key[oct][tone].freq / NORMFREQ; //freqRatio become 1 when at 78.125Hz
+          phase = 2.0 * PI * (float)i /(float)RESOLUTION; // pahse from 0 to 2PI
+          sig = sin(freqRatio * phase);
           soundBufferCal[i] += sig;
         }
       }
@@ -56,6 +59,7 @@ void dac::output(pianoKey *pkey) {
   }
 
   if(waveNum > 0){
+    // One or more keyboards were hit.
     for (uint32_t j = 0; j < BUFFER_LEN; j += 4) {
       soundBuffer[j] = 0;
       soundBuffer[j + 1] = (uint8_t)(127.0 + MAXAMPLITUDE * soundBufferCal[j/4] / (float)waveNum);
@@ -64,6 +68,7 @@ void dac::output(pianoKey *pkey) {
     }
   }
   else{
+    // None of the keyboards were hit, keep it silent by padding neutral(127)
     for (uint32_t k = 0; k < BUFFER_LEN; k += 4) {
       soundBuffer[k] = 0;
       soundBuffer[k + 1] = 127;
@@ -74,7 +79,8 @@ void dac::output(pianoKey *pkey) {
 
 
   // Serial.printf("%f %f %f %f\n", pkey->key[0][0].freq, pkey->key[0][11].freq, pkey->key[6][0].freq, pkey->key[6][11].freq);
-  Serial.printf("%f \n", soundBufferCal[a]);
+  // Serial.printf("%f \n", soundBufferCal[a]);
+  Serial.printf("%d %d \n", soundBuffer[a*4 + 1], waveNum);
   if(a++ > RESOLUTION) a=0;
   i2s_write(I2S_NUM_0, (char*)soundBuffer, BUFFER_LEN, &transBytes, portMAX_DELAY);
 }
@@ -94,58 +100,7 @@ void dac::init(pianoKey *pkey) {
     .fixed_mclk           = 0,
   };
 
-  // int step = 4;
-  // int val = 0;
-  // int val2 = 0;
-  // for (int i = 0; i < BUFFER_LEN; i += 4) {
-  //   soundBuffer[i] = 0;
-  //   soundBuffer[i + 1] = 127 + 127 * cos(2 * PI / 256 * val); // 約5kHz
-  //   soundBuffer[i + 2] = 0;
-  //   soundBuffer[i + 3] = 127 + 127 * sin(2 * PI / 256 * val2); // 約80Hz
-  //   val += (256 / step);
-  //   val2 += 1;
-  //   if (256 <= val) {
-  //     val = 0;
-  //   }
-  // }
-
-  // size_t transBytes;
-  // uint32_t waveNum;
-  // float freqRatio, phase, sig, soundBufferCal[BUFFER_LEN];
-
-  // static uint32_t a;
-  // static uint32_t flag;
-
-
-  // waveNum++;
-  // for (uint32_t i = 0; i < RESOLUTION; i++) {
-  //   freqRatio = pkey->key[1][0].freq / NORMFREQ; //78.125Hzの時に1
-  //   phase = 2.0 * PI * (float)i /(float)RESOLUTION; //0～2πの範囲
-  //   sig = sin(freqRatio * phase);//三角関数を基底関数にする
-  //   soundBufferCal[i] = sig;
-  // }
-
-  // if(waveNum > 0){
-  //   for (uint32_t j = 0; j < BUFFER_LEN; j += 4) {
-  //     soundBuffer[j] = 0;
-  //     soundBuffer[j + 1] = (uint8_t)(127.0 + MAXAMPLITUDE * soundBufferCal[j/4] / (float)waveNum);
-  //     soundBuffer[j + 2] = 0;
-  //     soundBuffer[j + 3] = soundBuffer[j + 1];
-  //   }
-  // }
-  // else{
-  //   for (uint32_t k = 0; k < BUFFER_LEN; k += 4) {
-  //     soundBuffer[k] = 0;
-  //     soundBuffer[k + 1] = 127;
-  //     soundBuffer[k + 2] = 0;
-  //     soundBuffer[k + 3] = 127;
-  //   }
-  // }
-
-
-  // 再生設定実施
   i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
   i2s_set_pin(I2S_NUM_0, NULL);
   i2s_zero_dma_buffer(I2S_NUM_0);
-
 }

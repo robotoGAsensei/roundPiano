@@ -58,7 +58,7 @@ void task50us(void *pvParameters){
 //dac.output()をコールしたタイミングでバッファ受け取り可能であれば受け取り処理が走る
 //受け取り処理として例えば50msを要するが、時間はバッファサイズやサンプリングレートに依存する
 //受け取り可能でない場合にコールすると、1ms以内に関数から抜ける
-//dac.output()のコール周期が例えば1sになると、断続的な波形が再生される
+//dac.output()のコール周期が一定以上に長くなると波形が途絶えて断続的な再生になる
 //連続波形を再生するためには連続的にコールし続ける必要がある
 void taskDac(void *pvParameters){
   uint32_t isrCount, isrTime;
@@ -70,9 +70,6 @@ void taskDac(void *pvParameters){
     portEXIT_CRITICAL(&timerMux);
 
     dac.output(&key);
-    // Serial.printf("Time : %d ms ---> ",isrTime);
-    // Serial.printf("volume[0][0,1,2] : %f %f %f\n", key.key[0][0].volume, key.key[0][1].volume, key.key[0][2].volume);
-    delay(1);
   }
 }
 
