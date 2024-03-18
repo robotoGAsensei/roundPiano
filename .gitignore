@@ -51,3 +51,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 00_software/pianoMain/.vscode/
+.vscode/

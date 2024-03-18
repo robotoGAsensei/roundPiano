@@ -4,12 +4,11 @@
 #include "pianoKey.h"
 
 class dac {
-public:
+ public:
   void init(pianoKey *pkey);
   void output(pianoKey *pkey);
 
-private:
-
+ private:
 };
 
 #endif /* DAC_H */
