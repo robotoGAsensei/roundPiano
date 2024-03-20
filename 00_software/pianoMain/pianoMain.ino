@@ -9,17 +9,19 @@
 #include "dac.h"
 #include "pianoKey.h"
 #include "multiplex.h"
+#include "pwm.h"
 
 hw_timer_t                *timer = NULL;
-volatile SemaphoreHandle_t timerSemaphore;
+volatile SemaphoreHandle_t timerSemAppCPU, timerSemProCPU;
 portMUX_TYPE               timerMux   = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t          isrCounter = 0;
 volatile uint32_t          lastIsrAt  = 0;
 static uint32_t            address;
 
-dac       dac;
+// dac       dac;
 pianoKey  key;
 multiplex multiplex;
+pwm pwm;
 
 void IRAM_ATTR onTimer() {
   // Increment the counter and set the time of ISR
@@ -28,35 +30,12 @@ void IRAM_ATTR onTimer() {
   lastIsrAt = millis();
   portEXIT_CRITICAL_ISR(&timerMux);
   // Give a semaphore that we can check in the loop
-  xSemaphoreGiveFromISR(timerSemaphore, NULL);
+  xSemaphoreGiveFromISR(timerSemAppCPU, NULL);
+  xSemaphoreGiveFromISR(timerSemProCPU, NULL);
   // It is safe to use digitalRead/Write here if you want to toggle an output
 }
 
-// 処理に時間のかかる関数を同一タスク内で実行すると実行周期が遅くなり波形が乱れる
-// dac.output()は一度実行すると50ms程度は関数から抜ける事ができない
-// このため50us周期で実行する必要のあるタスクを独立したコアに割り当てる
-// delayの最小単位であるdelay(1)によりウォッチドッグによるリセットを回避できるが
-// 実行周期として50usを達成するためにはdelay(1)による1msの空白期間が許容されない
-// このため disableCore0WDT()によりウォッチドッグを無効化する
-void task50us(void *pvParameters) {
-  while (1) {
-    if (xSemaphoreTake(timerSemaphore, 0) == pdTRUE) {
-      // キーボードの状態を更新しボリュームを取得する
-      for (int i = 0; i < OCTAVENUM; i++) key.process(i, address);
-
-      // マルチプレクサに出力するセレクト信号
-      if (++address > MULTIPLEXNUM - 1) address = 0;
-      multiplex.output(address);
-    }
-  }
-}
-
-// dac.output()をコールしたタイミングでバッファ受け取り可能であれば受け取り処理が走る
-// 受け取り処理として例えば50msを要するが、時間はバッファサイズやサンプリングレートに依存する
-// 受け取り可能でない場合にコールすると、1ms以内に関数から抜ける
-// dac.output()のコール周期が一定以上に長くなると波形が途絶えて断続的な再生になる
-// 連続波形を再生するためには連続的にコールし続ける必要がある
-void taskDac(void *pvParameters) {
+void taskOnAppCPU(void *pvParameters) {
   uint32_t isrCount, isrTime;
 
   while (1) {
@@ -65,7 +44,29 @@ void taskDac(void *pvParameters) {
     isrTime  = lastIsrAt;
     portEXIT_CRITICAL(&timerMux);
 
-    dac.output(&key);
+    if (xSemaphoreTake(timerSemAppCPU, 0) == pdTRUE) {
+      // キーボードの状態を更新しボリュームを取得する
+      for (int i = 0; i < OCTAVENUM; i++) key.process(i, address);
+      // マルチプレクサに出力するセレクト信号
+      if (++address > MULTIPLEXNUM - 1) address = 0;
+      multiplex.output(address);
+    }
+    delay(1);
+  }
+}
+
+void taskOnProCPU(void *pvParameters) {
+  uint32_t isrCount, isrTime;
+
+  while (1) {
+    portENTER_CRITICAL(&timerMux);
+    isrCount = isrCounter;
+    isrTime  = lastIsrAt;
+    portEXIT_CRITICAL(&timerMux);
+
+    if (xSemaphoreTake(timerSemProCPU, 0) == pdTRUE) {
+      pwm.output(isrTime, &key);
+    }
   }
 }
 
@@ -73,12 +74,14 @@ void setup() {
   Serial.begin(115200);
 
   // タスクを作る前にpinModeの設定をする必要がある
-  dac.init(&key);
+  // dac.init(&key);
   key.init();
   multiplex.init();
+  pwm.init();
 
   // Create semaphore to inform us when the timer has fired
-  timerSemaphore = xSemaphoreCreateBinary();
+  timerSemAppCPU = xSemaphoreCreateBinary();
+  timerSemProCPU = xSemaphoreCreateBinary();
   // Use 1st timer of 4 (counted from zero).
   // Clock count at 40MHz(=80MHz/2). By the prescaler 2 which must be in the range from 2 to 655535
   timer = timerBegin(0, 2, true);
@@ -91,8 +94,8 @@ void setup() {
   timerAlarmEnable(timer);
 
   xTaskCreateUniversal(
-      taskDac,
-      "taskDac",
+      taskOnAppCPU,
+      "taskOnProCPU",
       8192,
       NULL,
       configMAX_PRIORITIES - 1,  // 最高優先度
@@ -101,8 +104,8 @@ void setup() {
   );
 
   xTaskCreateUniversal(
-      task50us,
-      "task50us",
+      taskOnProCPU,
+      "taskOnAppCPU",
       8192,
       NULL,
       configMAX_PRIORITIES - 1,  // 最高優先度
