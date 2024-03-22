@@ -5,6 +5,7 @@
 #include "pianoKey.h"
 #include "pwm.h"
 #include "sin_table.h"
+#include "sqrt_table.h"
 
 const uint32_t PWMOUTPIN     = 26;
 const uint32_t PWMCH         = 0;
@@ -22,6 +23,7 @@ void pwm::output(uint32_t time_count, pianoKey *pkey) {
   // To avoid calculation error with float, limit the time_count range
   // time_count counts up to 20000 every 1s.
   // Limit the range of time_count within 16bit because multiplication with big number may iclude error.
+  // The longest playable wave length is 3.277[s] (=65535 / 20000)
   time_count = 0xffff & time_count;
   time       = (float)time_count / SAMPLING_RFEQ;
 
@@ -38,7 +40,7 @@ void pwm::output(uint32_t time_count, pianoKey *pkey) {
         // calculate remainder by multiplexing index with TABLE_NUM
         index = (SIN_TABLE_NUM - 1) & index;
         result += sin_table[index];
-        result /= (float)waveNum;
+        result /= sqrt_table[waveNum];
       }
     }
   }
