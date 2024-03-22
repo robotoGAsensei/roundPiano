@@ -36,7 +36,8 @@ void IRAM_ATTR onTimer() {
 }
 
 void taskOnAppCPU(void *pvParameters) {
-  uint32_t isrCount, isrTime;
+  uint32_t isrCount, isrTime, diffIsrCount;
+  static uint32_t isrCountPast;
 
   while (1) {
     portENTER_CRITICAL(&timerMux);
@@ -45,18 +46,22 @@ void taskOnAppCPU(void *pvParameters) {
     portEXIT_CRITICAL(&timerMux);
 
     if (xSemaphoreTake(timerSemAppCPU, 0) == pdTRUE) {
+      diffIsrCount = isrCount - isrCountPast;
+      isrCountPast = isrCount;
       // キーボードの状態を更新しボリュームを取得する
       for (int i = 0; i < OCTAVENUM; i++) key.process(i, address);
       // マルチプレクサに出力するセレクト信号
       if (++address > MULTIPLEXNUM - 1) address = 0;
       multiplex.output(address);
+      // Serial.printf("%d\n",diffIsrCount);
     }
     delay(1);
   }
 }
 
 void taskOnProCPU(void *pvParameters) {
-  uint32_t isrCount, isrTime;
+  uint32_t isrCount, isrTime, diffIsrCount;
+  static uint32_t isrCountPast;
 
   while (1) {
     portENTER_CRITICAL(&timerMux);
@@ -65,7 +70,13 @@ void taskOnProCPU(void *pvParameters) {
     portEXIT_CRITICAL(&timerMux);
 
     if (xSemaphoreTake(timerSemProCPU, 0) == pdTRUE) {
-      pwm.output(isrTime, &key);
+      diffIsrCount = isrCount - isrCountPast;
+      isrCountPast = isrCount;
+      pwm.output(isrCount, &key);
+      // If heavy process were included, this function would be less activated.
+      // diffIsrCount should be 1 if the process is light enough. 1 is the desired.
+      // The number greater than 1 means miss activation due to heavy process or interruption done by OS. 
+      // Serial.printf("%d\n",diffIsrCount);
     }
   }
 }
