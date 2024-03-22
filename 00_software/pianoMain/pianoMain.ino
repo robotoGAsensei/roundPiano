@@ -6,9 +6,8 @@
  This example code is in the public domain.
  */
 // Stop button is attached to PIN 0 (IO0)
-#include "dac.h"
-#include "pianoKey.h"
 #include "multiplex.h"
+#include "pianoKey.h"
 #include "pwm.h"
 
 hw_timer_t                *timer = NULL;
@@ -16,12 +15,10 @@ volatile SemaphoreHandle_t timerSemAppCPU, timerSemProCPU;
 portMUX_TYPE               timerMux   = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t          isrCounter = 0;
 volatile uint32_t          lastIsrAt  = 0;
-static uint32_t            address;
 
-// dac       dac;
 pianoKey  key;
 multiplex multiplex;
-pwm pwm;
+pwm       pwm;
 
 void IRAM_ATTR onTimer() {
   // Increment the counter and set the time of ISR
@@ -36,8 +33,9 @@ void IRAM_ATTR onTimer() {
 }
 
 void taskOnAppCPU(void *pvParameters) {
-  uint32_t isrCount, isrTime, diffIsrCount;
+  uint32_t        isrCount, isrTime, diffIsrCount;
   static uint32_t isrCountPast;
+  static uint32_t tone;
 
   while (1) {
     portENTER_CRITICAL(&timerMux);
@@ -49,10 +47,10 @@ void taskOnAppCPU(void *pvParameters) {
       diffIsrCount = isrCount - isrCountPast;
       isrCountPast = isrCount;
       // キーボードの状態を更新しボリュームを取得する
-      for (int i = 0; i < OCTAVENUM; i++) key.process(i, address);
+      for (int i = 0; i < OCTAVENUM; i++) key.process(i, tone);
       // マルチプレクサに出力するセレクト信号
-      if (++address > MULTIPLEXNUM - 1) address = 0;
-      multiplex.output(address);
+      if (++tone > MULTIPLEXNUM - 1) tone = 0;
+      multiplex.output(tone);
       // Serial.printf("%d\n",diffIsrCount);
     }
     delay(1);
@@ -60,7 +58,7 @@ void taskOnAppCPU(void *pvParameters) {
 }
 
 void taskOnProCPU(void *pvParameters) {
-  uint32_t isrCount, isrTime, diffIsrCount;
+  uint32_t        isrCount, isrTime, diffIsrCount;
   static uint32_t isrCountPast;
 
   while (1) {
@@ -75,7 +73,7 @@ void taskOnProCPU(void *pvParameters) {
       pwm.output(isrCount, &key);
       // If heavy process were included, this function would be less activated.
       // diffIsrCount should be 1 if the process is light enough. 1 is the desired.
-      // The number greater than 1 means miss activation due to heavy process or interruption done by OS. 
+      // The number greater than 1 means miss activation due to heavy process or interruption done by OS.
       // Serial.printf("%d\n",diffIsrCount);
     }
   }
@@ -85,7 +83,6 @@ void setup() {
   Serial.begin(115200);
 
   // タスクを作る前にpinModeの設定をする必要がある
-  // dac.init(&key);
   key.init();
   multiplex.init();
   pwm.init();
