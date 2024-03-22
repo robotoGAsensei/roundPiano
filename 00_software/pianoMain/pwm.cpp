@@ -6,24 +6,24 @@
 #include "pwm.h"
 #include "sin_table.h"
 
-const uint32_t PWMOUTPIN = 26;
-const uint32_t PWMCH     = 0;
-const uint32_t PWMMAX    = 1023;
+const uint32_t PWMOUTPIN     = 26;
+const uint32_t PWMCH         = 0;
+const uint32_t PWMMAX        = 1023;
+const float    SAMPLING_RFEQ = 20000.0f;  // 20[kHz]
 
 void pwm::output(uint32_t time_count, pianoKey *pkey) {
   uint32_t waveNum = 0;
   float    result  = 0.0f;
 
-  uint32_t index = 0;
-  uint32_t internal_time_count = 0;
+  uint32_t index        = 0;
   uint32_t result_digit = 0;
-  float    time = 0.0f;
+  float    time         = 0.0f;
 
   // To avoid calculation error with float, limit the time_count range
   // time_count counts up to 20000 every 1s.
-  // Assume that 10Hz(=0.1s) is the lowest tone, then 2000 (=20000 * 0.1s) counts are enogh to have
-  internal_time_count = 0x07ff & time_count;  // 0x07ff = 2047 which is about 2000
-  time                = (float)internal_time_count / 20000.0f;
+  // Limit the range of time_count within 16bit because multiplication with big number may iclude error.
+  time_count = 0xffff & time_count;
+  time       = (float)time_count / SAMPLING_RFEQ;
 
   for (uint32_t oct = 0; oct < OCTAVENUM; oct++) {
     for (uint32_t tone = 0; tone < TONENUM; tone++) {
@@ -44,8 +44,8 @@ void pwm::output(uint32_t time_count, pianoKey *pkey) {
   }
   result_digit = (uint32_t)((float)PWMMAX * (1.0f + result) / 2.0f);
   ledcWrite(PWMCH, result_digit);
-  
-  // Serial.printf("%d %d %d %f\n", result_digit, internal_time_count, waveNum, result);
+
+  // Serial.printf("%d %d %d %f\n", result_digit, time_count, waveNum, result);
 }
 
 void pwm::init(void) {
